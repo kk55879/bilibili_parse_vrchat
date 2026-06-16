@@ -10,11 +10,11 @@ const PORT = process.env.PORT || 3000;
 
 // 服務計數器
 let serviceCounters = {
-    total: 0,           // 累計總服務次數
-    today: 0,           // 今日服務次數
-    thisMonth: 0,       // 本月服務次數
-    lastResetDate: new Date().toDateString(), // 上次重置日期
-    lastResetMonth: new Date().getMonth()     // 上次重置月份
+    total: 0,
+    today: 0,
+    thisMonth: 0,
+    lastResetDate: new Date().toDateString(),
+    lastResetMonth: new Date().getMonth()
 };
 
 // 中間件
@@ -121,7 +121,7 @@ async function resolveB23ShortLink(shortUrl) {
     }
 }
 
-// 節點狀態管理 - 三個主要節點 + Mirror 節點
+// 節點狀態管理
 const nodeStatus = {
     'upos-sz-estgoss.bilivideo.com': { available: true, lastCheck: 0, successCount: 0, failCount: 0, region: '深圳' },
     'upos-bj-estgoss.bilivideo.com': { available: true, lastCheck: 0, successCount: 0, failCount: 0, region: '北京' },
@@ -139,9 +139,7 @@ async function getBestAvailableNode(bvid) {
         const bRate = bStatus.successCount / (bStatus.successCount + bStatus.failCount || 1);
         return bRate - aRate;
     });
-    const bestNode = sortedNodes[0];
-    console.log(`🎯 選擇節點: ${bestNode} (${nodeStatus[bestNode].region})`);
-    return bestNode;
+    return sortedNodes[0] || 'upos-sz-estgoss.bilivideo.com';
 }
 
 // 帶超時的解析函數
@@ -192,7 +190,6 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
                 const videoData = videoInfoResponse.data.data;
                 const cid = videoData.cid;
                 
-                // 💡 降級優化：改為請求 qn=80 (1080p)，避開大會員驗證風控
                 const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=80&fnval=16&platform=html5`, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -204,7 +201,6 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
                     const streamData = streamResponse.data.data;
                     
                     if (streamData.dash && streamData.dash.video && streamData.dash.video.length > 0) {
-                        // 💡 智慧匹配：優先尋找 1080p(80) 或 720p(64)，如果都沒有，自動採用 B 站允許傳回的最高畫質
                         let targetVideo = streamData.dash.video.find(item => item.id === 80) || 
                                           streamData.dash.video.find(item => item.id === 64) || 
                                           streamData.dash.video.sort((a, b) => b.id - a.id)[0];
@@ -232,7 +228,7 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
                                 nodeStatus[selectedMainNode].successCount++;
                                 nodeStatus[selectedMainNode].available = true;
                             }
-                            console.log(`✅ 解析成功 (第 ${attempt} 次嘗試) | DASH 品質 ID: ${targetVideo.id} | 嘗試時間: ${attemptTime}ms`);
+                            console.log(`✅ 解析成功 (第 ${attempt} 次嘗試) | DASH 品質 ID: ${targetVideo.id} | 節點: ${selectedMainNode} | 耗時: ${attemptTime}ms`);
                             return { url: mainNodeUrl, format: 'DASH', node: selectedMainNode };
                         }
                     }
@@ -252,16 +248,15 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
                             nodeStatus[selectedMainNode].successCount++;
                             nodeStatus[selectedMainNode].available = true;
                         }
-                        console.log(`✅ 解析成功 (第 ${attempt} 次嘗試) | 格式: FLV | 嘗試時間: ${attemptTime}ms`);
+                        console.log(`✅ 解析成功 (第 ${attempt} 次嘗試) | 格式: FLV | 節點: ${selectedMainNode} | 耗時: ${attemptTime}ms`);
                         return { url: mainNodeUrl, format: 'FLV', node: selectedMainNode };
                     }
                 }
             }
             throw new Error('無法獲取流地址');
         } catch (error) {
-            const attemptEndTime = Date.now();
-            const attemptTime = attemptEndTime - attemptStartTime;
-            console.log(`❌ 第 ${attempt} 次嘗試失敗: ${error.message} | 嘗試時間: ${attemptTime}ms`);
+            const attemptTime = Date.now() - attemptStartTime;
+            console.log(`❌ 第 ${attempt} 次嘗試失敗: ${error.message} | 耗時: ${attemptTime}ms`);
             if (attempt === maxRetries) throw error;
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
@@ -273,7 +268,7 @@ async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         const attemptStartTime = Date.now();
         try {
-            console.log(`🔄 Niche 嘗試解析 (第 ${attempt}/${maxRetries} 次): ${bvid} | 開始時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
+            console.log(`🔄 Niche 嘗試解析 (第 ${attempt}/${maxRetries} 次): ${bvid}`);
             
             const videoInfoResponse = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
                 headers: {
@@ -324,7 +319,7 @@ async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
                                 nodeStatus[selectedMainNode].successCount++;
                                 nodeStatus[selectedMainNode].available = true;
                             }
-                            console.log(`✅ Niche 解析成功 (第 ${attempt} 次嘗試) | DASH 品質 ID: ${targetVideo.id} | 嘗試時間: ${attemptTime}ms`);
+                            console.log(`✅ Niche 解析成功 (第 ${attempt} 次嘗試) | DASH 品質 ID: ${targetVideo.id} | 耗時: ${attemptTime}ms`);
                             return { url: mainNodeUrl, format: 'DASH', node: selectedMainNode };
                         }
                     }
@@ -344,16 +339,15 @@ async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
                             nodeStatus[selectedMainNode].successCount++;
                             nodeStatus[selectedMainNode].available = true;
                         }
-                        console.log(`✅ Niche 解析成功 (第 ${attempt} 次嘗試) | 格式: FLV | 嘗試時間: ${attemptTime}ms`);
+                        console.log(`✅ Niche 解析成功 (第 ${attempt} 次嘗試) | 格式: FLV | 耗時: ${attemptTime}ms`);
                         return { url: mainNodeUrl, format: 'FLV', node: selectedMainNode };
                     }
                 }
             }
             throw new Error('無法獲取流地址');
         } catch (error) {
-            const attemptEndTime = Date.now();
-            const attemptTime = attemptEndTime - attemptStartTime;
-            console.log(`❌ Niche 第 ${attempt} 次嘗試失敗: ${error.message} | 嘗試時間: ${attemptTime}ms`);
+            const attemptTime = Date.now() - attemptStartTime;
+            console.log(`❌ Niche 第 ${attempt} 次嘗試失敗: ${error.message} | 耗時: ${attemptTime}ms`);
             if (attempt === maxRetries) throw error;
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
@@ -364,18 +358,10 @@ async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
 async function parseAndRedirectToNiche(req, res, bvid) {
     const startTime = Date.now();
     try {
-        let clientIP = req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
-        if (clientIP.startsWith('::ffff:')) { clientIP = clientIP.substring(7); }
-        const timestamp = new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'});
-        const location = getLocationInfo(clientIP);
-        
-        console.log(`🔄 Niche 重定向解析: ${bvid} | 請求者: ${clientIP} | 位置: ${location} | 時間: ${timestamp}`);
-        
         const result = await parseWithTimeoutForNiche(bvid, 10000);
-        const endTime = Date.now();
-        const parseTime = endTime - startTime;
+        const parseTime = Date.now() - startTime;
         const counters = updateCounters();
-        console.log(`✅ Niche 解析成功 | 格式: ${result.format} | 節點: ${result.node} | 解析時間: ${parseTime}ms | 今日${counters.today}次`);
+        console.log(`✅ Niche 解析成功 | 格式: ${result.format} | 節點: ${result.node} | 耗時: ${parseTime}ms`);
         return res.redirect(result.url);
     } catch (error) {
         console.error(`❌ Niche 解析徹底失敗，返回原網址`);
@@ -383,22 +369,14 @@ async function parseAndRedirectToNiche(req, res, bvid) {
     }
 }
 
-// 解析並重定向到流地址的函數
-async function parseAndRedirectTo1440P(req, res, bvid) {
+// 解析並重定向到主服務節點
+async function parseAndRedirectToMain(req, res, bvid) {
     const startTime = Date.now();
     try {
-        let clientIP = req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
-        if (clientIP.startsWith('::ffff:')) { clientIP = clientIP.substring(7); }
-        const timestamp = new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'});
-        const location = getLocationInfo(clientIP);
-        
-        console.log(`🔄 重定向解析: ${bvid} | 請求者: ${clientIP} | 位置: ${location} | 時間: ${timestamp}`);
-        
         const result = await parseWithTimeout(bvid, 10000);
-        const endTime = Date.now();
-        const parseTime = endTime - startTime;
+        const parseTime = Date.now() - startTime;
         const counters = updateCounters();
-        console.log(`✅ 解析成功 | 格式: ${result.format} | 節點: ${result.node} | 解析時間: ${parseTime}ms | 今日${counters.today}次`);
+        console.log(`✅ 解析成功 | 格式: ${result.format} | 節點: ${result.node} | 耗時: ${parseTime}ms`);
         return res.redirect(result.url);
     } catch (error) {
         console.error(`❌ 解析徹底失敗，返回原網址`);
@@ -433,11 +411,12 @@ app.get('/niche/', async (req, res) => {
             if (resolvedUrl) processedUrl = resolvedUrl;
         }
         
-        if (processedUrl.includes('bilibili.com') || processedUrl.includes('bvid=') || processedUrl.includes('BV')) {
-            let bvid = null;
-            const match = processedUrl.match(/(BV[a-zA-Z0-9]+)/);
-            if (match) bvid = match[1];
-            if (bvid) return parseAndRedirectToNiche(req, res, bvid);
+        let bvid = null;
+        const match = processedUrl.match(/(BV[a-zA-Z0-9]+)/);
+        if (match) bvid = match[1];
+
+        if (bvid && (processedUrl.includes('bilibili.com') || processedUrl.includes('BV'))) {
+            return parseAndRedirectToNiche(req, res, bvid);
         }
 
         const userAgentHeader = req.headers['user-agent'] || '';
@@ -450,7 +429,7 @@ app.get('/niche/', async (req, res) => {
     res.send(`<h1>🎯 Niche 解析工具</h1>`);
 });
 
-// 主頁面路由 - 處理 URL 參數重定向
+// 主頁面路由
 app.get('/', async (req, res) => {
     let url = null;
     const urlParamIndex = req.url.indexOf('url=');
@@ -483,7 +462,8 @@ app.get('/', async (req, res) => {
         if (match) bvid = match[1];
 
         if (bvid && (processedUrl.includes('bilibili.com') || processedUrl.includes('BV'))) {
-            return parseAndRedirectTo1440P(req, res, bvid);
+            // 💡 修正點：精準呼叫修正後的 parseAndRedirectToMain，切斷吊空阻塞
+            return parseAndRedirectToMain(req, res, bvid);
         }
 
         // 智慧型安全分流器
