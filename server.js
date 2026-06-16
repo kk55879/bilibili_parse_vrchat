@@ -246,7 +246,7 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
                 const cid = videoData.cid;
                 
                 // 嘗試獲取 1440P 流地址
-                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=112&fnval=16&platform=html5`, {
+                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=80&fnval=16&platform=html5`, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         'Referer': 'https://www.bilibili.com/'
@@ -337,9 +337,6 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
             const attemptEndTime = Date.now();
             const attemptTime = attemptEndTime - attemptStartTime;
             
-            // 記錄節點失敗（如果知道使用的節點）
-            // 這裡我們無法直接知道失敗的節點，所以不記錄失敗
-            
             console.log(`❌ 第 ${attempt} 次嘗試失敗: ${error.message} | 嘗試時間: ${attemptTime}ms`);
             if (attempt === maxRetries) {
                 throw error;
@@ -370,7 +367,7 @@ async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
                 const cid = videoData.cid;
                 
                 // 嘗試獲取 1440P 流地址
-                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=112&fnval=16&platform=html5`, {
+                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=80&fnval=16&platform=html5`, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         'Referer': 'https://www.bilibili.com/'
@@ -658,7 +655,7 @@ app.get('/niche/', async (req, res) => {
         
         // 檢查是否是有效的 Bilibili 連結（包括解析後的短連結）
         if (processedUrl.includes('bilibili.com') || processedUrl.includes('bvid=') || processedUrl.includes('BV')) {
-            // 提取 BV 號和分P
+            // 提取 BV 號整合分P
             let bvid = null;
             let p = 1;
 
@@ -686,7 +683,22 @@ app.get('/niche/', async (req, res) => {
             }
         }
 
-        // 如果不是有效的 Bilibili 連結，顯示錯誤頁面
+        // 【安全分流邏輯】如果走到這裡，代表不是有效的 B 站連結
+        const userAgentHeader = req.headers['user-agent'] || '';
+        const acceptHeader = req.headers['accept'] || '';
+
+        // 辨識是否為 VRChat 播放器核心
+        const isVRChat = userAgentHeader.includes('AVProVideo') || 
+                         userAgentHeader.includes('VRChat') || 
+                         acceptHeader.includes('video/') ||
+                         !acceptHeader.includes('text/html');
+
+        if (isVRChat) {
+            console.log(`✈️ [Niche路由] 偵測到 VRChat 播放器請求非 B 站網址，直接放行重定向: ${processedUrl}`);
+            return res.redirect(processedUrl);
+        }
+
+        // 如果不是有效的 Bilibili 連結，且為一般網頁瀏覽器操作，顯示錯誤頁面
         return res.send(`
             <!DOCTYPE html>
             <html lang="zh-TW">
@@ -703,7 +715,7 @@ app.get('/niche/', async (req, res) => {
                 <div class="error">
                     <h1>❌ Niche 解析失敗</h1>
                     <p>請提供有效的 Bilibili 影片連結</p>
-                    <p>格式：<code>http://192.168.0.10:3000/niche/?url=https://www.bilibili.com/video/BV1xx411c7mu</code></p>
+                    <p>格式：<code>https://bili.karabuoke.com/niche/?url=https://www.bilibili.com/video/BV1xx411c7mu</code></p>
                     <a href="/" style="color: #00aef0;">返回首頁</a>
                 </div>
             </body>
@@ -853,35 +865,25 @@ app.get('/', async (req, res) => {
             if (bvid) {
                 // 直接導向到解析結果
                 return parseAndRedirectTo1440P(req, res, bvid);
-            } else {
-                // 如果是 Bilibili 連結但沒有找到 BV 號，顯示錯誤
-                return res.send(`
-                    <!DOCTYPE html>
-                    <html lang="zh-TW">
-                    <head>
-                        <meta charset="UTF-8">
-                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                        <title>解析失敗</title>
-                        <style>
-                            body { font-family: Arial, sans-serif; background: #1a1a1a; color: #fff; text-align: center; padding: 50px; }
-                            .error { background: #333; padding: 20px; border-radius: 8px; border: 2px solid #ff4444; }
-                        </style>
-                    </head>
-                    <body>
-                        <div class="error">
-                            <h2>❌ 解析失敗</h2>
-                            <p>請提供完整的 Bilibili 影片連結，包含 BV 號</p>
-                            <p>例如：https://www.bilibili.com/video/BV1xx411c7mu</p>
-                            <p><a href="/" style="color: #4CAF50;">返回首頁</a></p>
-                        </div>
-                    </body>
-                    </html>
-                `);
             }
         }
 
+        // 【安全分流邏輯】如果走到這裡，代表不是有效的 B 站連結或找不到 BV 號
+        const userAgentHeader = req.headers['user-agent'] || '';
+        const acceptHeader = req.headers['accept'] || '';
 
-        // 如果不是有效的 Bilibili 連結，顯示錯誤頁面
+        // 辨識是否為 VRChat 播放器核心
+        const isVRChat = userAgentHeader.includes('AVProVideo') || 
+                         userAgentHeader.includes('VRChat') || 
+                         acceptHeader.includes('video/') ||
+                         !acceptHeader.includes('text/html');
+
+        if (isVRChat) {
+            console.log(`✈️ [主路由] 偵測到 VRChat 播放器請求非 B 站網址，直接放行重定向: ${processedUrl}`);
+            return res.redirect(processedUrl);
+        }
+
+        // 如果不是有效的 Bilibili 連結，且為網頁操作，顯示錯誤頁面
         return res.send(`
             <!DOCTYPE html>
             <html lang="zh-TW">
@@ -896,10 +898,10 @@ app.get('/', async (req, res) => {
             </head>
             <body>
                 <div class="error">
-                    <h1>❌ 解析失敗</h1>
-                    <p>請提供有效的 Bilibili 影片連結</p>
-                    <p>格式：<code>http://192.168.0.10:3000/?url=https://www.bilibili.com/video/BV1xx411c7mu</code></p>
-                    <a href="/" style="color: #00aef0;">返回首頁</a>
+                    <h2>❌ 解析失敗</h2>
+                    <p>請提供完整的 Bilibili 影片連結，包含 BV 號</p>
+                    <p>例如：https://www.bilibili.com/video/BV1xx411c7mu</p>
+                    <p><a href="/" style="color: #4CAF50;">返回首頁</a></p>
                 </div>
             </body>
             </html>
@@ -1179,9 +1181,9 @@ app.get('/api/parse/video/:bvid', async (req, res) => {
                             newUrl = newUrl.replace(/upos-hz-[^/]+\.akamaized\.net/, selectedMainNode);
                             
                             // 總是添加主節點地址，並根據節點類型顯示不同描述
-                                const nodeDescription = selectedMainNode === 'upos-sz-mirror08c.bilivideo.com' 
-                                    ? `栖隙居所適配 - 高品質音頻 (已繞過防盜鏈)`
-                                    : `主CDN節點: ${selectedMainNode} - 高品質音頻 (已繞過防盜鏈) 請複製我!`;
+                            const nodeDescription = selectedMainNode === 'upos-sz-mirror08c.bilivideo.com' 
+                                ? `栖隙居所適配 - 高品質音頻 (已繞過防盜鏈)`
+                                : `主CDN節點: ${selectedMainNode} - 高品質音頻 (已繞過防盜鏈) 請複製我!`;
                             
                             results.push({
                                 title: `${quality.name} DASH 音頻流 (主節點)`,
@@ -1239,8 +1241,6 @@ app.get('/api/parse/video/:bvid', async (req, res) => {
         });
     }
 });
-
-
 
 // 獲取服務計數器資訊的 API
 app.get('/api/counters', (req, res) => {
