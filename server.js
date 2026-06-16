@@ -229,7 +229,6 @@ async function parseWithTimeoutForNiche(bvid, timeoutMs = 10000) {
 // 重試解析函數
 async function parseVideoWithRetry(bvid, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        // 💡 修正：將時間戳移到 try 外面，確保 catch 區塊能夠讀取到
         const attemptStartTime = Date.now();
         try {
             console.log(`🔄 嘗試解析 (第 ${attempt}/${maxRetries} 次): ${bvid} | 開始時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
@@ -246,8 +245,8 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
                 const videoData = videoInfoResponse.data.data;
                 const cid = videoData.cid;
                 
-                // 嘗試獲取 1440P 流地址
-                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=80&fnval=16&platform=html5`, {
+                // 💡 修正：將 qn=80 改為 qn=112，確保 B 站回傳 1440P 影片流數據
+                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=112&fnval=16&platform=html5`, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         'Referer': 'https://www.bilibili.com/'
@@ -351,7 +350,6 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
 // 重試解析函數（Niche 專用 - 強制使用 upos-sz-mirrorcos.bilivideo.com）
 async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        // 💡 修正：將時間戳移到 try 外面，確保 catch 區塊能夠讀取到
         const attemptStartTime = Date.now();
         try {
             console.log(`🔄 Niche 嘗試解析 (第 ${attempt}/${maxRetries} 次): ${bvid} | 開始時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
@@ -368,8 +366,8 @@ async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
                 const videoData = videoInfoResponse.data.data;
                 const cid = videoData.cid;
                 
-                // 嘗試獲取 1440P 流地址
-                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=80&fnval=16&platform=html5`, {
+                // 💡 修正：將 qn=80 改為 qn=112，確保 Niche 節點也能順利拿到 1440P 的串流
+                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=112&fnval=16&platform=html5`, {
                     headers: {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                         'Referer': 'https://www.bilibili.com/'
@@ -474,7 +472,6 @@ async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
 async function parseAndRedirectToNiche(req, res, bvid) {
     const startTime = Date.now();
     try {
-        // 嘗試多種方式獲取真實 IP
         let clientIP = req.ip || 
                       req.connection?.remoteAddress || 
                       req.socket?.remoteAddress ||
@@ -483,7 +480,6 @@ async function parseAndRedirectToNiche(req, res, bvid) {
                       req.headers['cf-connecting-ip'] ||
                       'unknown';
         
-        // 清理 IPv6 映射的 IPv4 地址
         if (clientIP.startsWith('::ffff:')) {
             clientIP = clientIP.substring(7);
         }
@@ -499,12 +495,10 @@ async function parseAndRedirectToNiche(req, res, bvid) {
         console.log(`   語言: ${acceptLanguage.substring(0, 20)}... | 來源: ${referer.substring(0, 30)}...`);
         console.log(`   ⏱️ 解析開始時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
         
-        // 使用帶超時的重試解析（強制使用 niche 節點）
         try {
             const result = await parseWithTimeoutForNiche(bvid, 10000); // 10秒超時
             const endTime = Date.now();
             const parseTime = endTime - startTime;
-            // 更新服務計數器
             const counters = updateCounters();
             console.log(`✅ Niche 解析成功 | 格式: ${result.format} | 品質: 1440P | 節點: ${result.node} | 解析時間: ${parseTime}ms | 服務次數: 今日${counters.today}次/本月${counters.thisMonth}次/累計${counters.total}次 | 完成時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
             return res.redirect(result.url);
@@ -519,7 +513,6 @@ async function parseAndRedirectToNiche(req, res, bvid) {
         const endTime = Date.now();
         const parseTime = endTime - startTime;
         console.error(`❌ Niche 解析重定向錯誤: ${bvid} - ${error.message} | 解析時間: ${parseTime}ms`);
-        // 錯誤時重定向到原始 Bilibili 頁面
         return res.redirect(`https://www.bilibili.com/video/${bvid}`);
     }
 }
@@ -528,7 +521,6 @@ async function parseAndRedirectToNiche(req, res, bvid) {
 async function parseAndRedirectTo1440P(req, res, bvid) {
     const startTime = Date.now();
     try {
-        // 嘗試多種方式獲取真實 IP
         let clientIP = req.ip || 
                       req.connection?.remoteAddress || 
                       req.socket?.remoteAddress ||
@@ -537,7 +529,6 @@ async function parseAndRedirectTo1440P(req, res, bvid) {
                       req.headers['cf-connecting-ip'] ||
                       'unknown';
         
-        // 清理 IPv6 映射的 IPv4 地址
         if (clientIP.startsWith('::ffff:')) {
             clientIP = clientIP.substring(7);
         }
@@ -553,12 +544,10 @@ async function parseAndRedirectTo1440P(req, res, bvid) {
         console.log(`   語言: ${acceptLanguage.substring(0, 20)}... | 來源: ${referer.substring(0, 30)}...`);
         console.log(`   ⏱️ 解析開始時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
         
-        // 使用帶超時的重試解析
         try {
             const result = await parseWithTimeout(bvid, 10000); // 10秒超時
             const endTime = Date.now();
             const parseTime = endTime - startTime;
-            // 更新服務計數器
             const counters = updateCounters();
             console.log(`✅ 解析成功 | 格式: ${result.format} | 品質: 1440P | 節點: ${result.node} | 解析時間: ${parseTime}ms | 服務次數: 今日${counters.today}次/本月${counters.thisMonth}次/累計${counters.total}次 | 完成時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
             return res.redirect(result.url);
@@ -573,27 +562,22 @@ async function parseAndRedirectTo1440P(req, res, bvid) {
         const endTime = Date.now();
         const parseTime = endTime - startTime;
         console.error(`❌ 解析重定向錯誤: ${bvid} - ${error.message} | 解析時間: ${parseTime}ms`);
-        // 錯誤時重定向到原始 Bilibili 頁面
         return res.redirect(`https://www.bilibili.com/video/${bvid}`);
     }
 }
 
 // Niche 專用路由 - 只使用 upos-sz-mirrorcos.bilivideo.com 節點
 app.get('/niche/', async (req, res) => {
-    // 💡 修正：直接從原始 req.url 提取完整 url 參數，防止雙重問號被 Express 切碎
     let url = null;
     const urlParamIndex = req.url.indexOf('url=');
     if (urlParamIndex !== -1) {
         url = req.url.substring(urlParamIndex + 4);
-        // 如果傳入的網址包含多個問號且帶有 B 站追蹤碼，直接將重複的問號修正為標準 &
         url = url.replace(/(\/video\/BV[a-zA-Z0-9]+)\/\?/, '$1/?');
     }
 
     if (url) {
-        // 解碼 URL 以便處理
         url = decodeURIComponent(url);
 
-        // 嘗試多種方式獲取真實 IP
         let clientIP = req.ip || 
                       req.connection?.remoteAddress || 
                       req.socket?.remoteAddress ||
@@ -602,7 +586,6 @@ app.get('/niche/', async (req, res) => {
                       req.headers['cf-connecting-ip'] ||
                       'unknown';
         
-        // 清理 IPv6 映射的 IPv4 地址
         if (clientIP.startsWith('::ffff:')) {
             clientIP = clientIP.substring(7);
         }
@@ -618,10 +601,8 @@ app.get('/niche/', async (req, res) => {
         console.log(`   語言: ${acceptLanguage.substring(0, 20)}... | 來源: ${referer.substring(0, 30)}...`);
         console.log(`   ⏱️ 請求開始時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
 
-        // 檢查是否是 Bilibili 影片連結，支援多種格式
         let processedUrl = url;
         
-        // 智能處理各種 URL 格式
         if (!url.startsWith('http://') && !url.startsWith('https://')) {
             if (url.startsWith('www.bilibili.com') || url.startsWith('bilibili.com')) {
                 processedUrl = 'https://' + url;
@@ -632,7 +613,6 @@ app.get('/niche/', async (req, res) => {
             }
         }
         
-        // 檢查是否是 b23.tv 短連結
         if (processedUrl.includes('b23.tv/')) {
             console.log(`🔗 檢測到 b23.tv 短連結，正在解析...`);
             const resolvedUrl = await resolveB23ShortLink(processedUrl);
@@ -666,7 +646,6 @@ app.get('/niche/', async (req, res) => {
             }
         }
         
-        // 檢查是否是有效的 Bilibili 連結（包括解析後的短連結）
         if (processedUrl.includes('bilibili.com') || processedUrl.includes('bvid=') || processedUrl.includes('BV')) {
             let bvid = null;
             let p = 1;
@@ -693,7 +672,6 @@ app.get('/niche/', async (req, res) => {
             }
         }
 
-        // 【安全分流邏輯】
         const userAgentHeader = req.headers['user-agent'] || '';
         const acceptHeader = req.headers['accept'] || '';
 
@@ -765,7 +743,6 @@ app.get('/niche/', async (req, res) => {
 
 // 主頁面路由 - 處理 URL 參數重定向
 app.get('/', async (req, res) => {
-    // 💡 修正：直接從原始 req.url 提取完整 url 參數，防止雙重問號被 Express 切碎
     let url = null;
     const urlParamIndex = req.url.indexOf('url=');
     if (urlParamIndex !== -1) {
@@ -773,7 +750,6 @@ app.get('/', async (req, res) => {
     }
 
     if (url) {
-        // 解碼 URL
         url = decodeURIComponent(url);
 
         let clientIP = req.ip || 
@@ -870,7 +846,6 @@ app.get('/', async (req, res) => {
             }
         }
 
-        // 【安全分流邏輯】
         const userAgentHeader = req.headers['user-agent'] || '';
         const acceptHeader = req.headers['accept'] || '';
 
@@ -900,7 +875,6 @@ app.get('/', async (req, res) => {
                 <div class="error">
                     <h2>❌ 解析失敗</h2>
                     <p>請提供完整的 Bilibili 影片連結，包含 BV 號</p>
-                    <p>例如：https://www.bilibili.com/video/BV1xx411c7mu</p>
                     <p><a href="/" style="color: #4CAF50;">返回首頁</a></p>
                 </div>
             </body>
@@ -1263,9 +1237,9 @@ app.use(express.static('.'));
 
 // 啟動服務器
 app.listen(PORT, () => {
-    console.log(`🚀 VRC Bilibili 解析服務器已啟動`);
+    console.log("🚀 VRC Bilibili 解析服務器已啟動");
     console.log(`📍 本地地址: http://localhost:${PORT}`);
     console.log(`🌐 網路地址: http://0.0.0.0:${PORT}`);
-    console.log(`🌍 正式網址: https://vrcbilibili.xn--o8z.tw/`);
-    console.log(`💡 使用方式: https://vrcbilibili.xn--o8z.tw/?url=BILIBILI_URL`);
+    console.log("🌍 正式網址: https://vrcbilibili.xn--o8z.tw/");
+    console.log("💡 使用方式: https://vrcbilibili.xn--o8z.tw/?url=BILIBILI_URL");
 });
