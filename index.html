@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VRC Bilibili 解析工具 - vrcbilibili.xn--o8z.tw</title>
+    <title>VRC Bilibili 解析工具 - bili.karabuoke.com</title>
     <meta name="description" content="VRC Bilibili 解析工具，快速獲取 Bilibili 影片的直鏈地址，支持多清晰度解析">
     <meta name="keywords" content="Bilibili,解析,影片,直鏈,VRC">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -13,35 +13,33 @@
 </head>
 <body>
     <div class="container">
-               <header class="header">
-                   <div class="language-switcher">
-                       <button class="lang-btn active" data-lang="zh">中文</button>
-                       <button class="lang-btn" data-lang="ja">日本語</button>
-                   </div>
-                   <div class="logo">
-                       <i class="fab fa-bilibili"></i>
-                       <h1 data-zh="VRC Bilibili 解析工具" data-ja="VRC Bilibili 解析ツール">VRC Bilibili 解析工具</h1>
-                   </div>
-                   <p class="subtitle" data-zh="快速獲取 Bilibili 影片的直鏈地址" data-ja="Bilibili 動画の直接リンクを素早く取得">快速獲取 Bilibili 影片的直鏈地址</p>
-                   <p class="domain">vrcbilibili.xn--o8z.tw</p>
-                   
-                   <!-- 服務計數器 - 新設計 -->
-                   <div class="stats-container">
-                       <div class="stat-box">
-                           <div class="stat-number" id="todayCount">0</div>
-                           <div class="stat-label" data-zh="今日服務" data-ja="今日サービス">今日服務</div>
-                       </div>
-                       <div class="stat-box">
-                           <div class="stat-number" id="monthCount">0</div>
-                           <div class="stat-label" data-zh="本月服務" data-ja="今月サービス">本月服務</div>
-                       </div>
-                       <div class="stat-box">
-                           <div class="stat-number" id="totalCount">0</div>
-                           <div class="stat-label" data-zh="累計服務" data-ja="累計サービス">累計服務</div>
-                       </div>
-                   </div>
-                   
-               </header>
+        <header class="header">
+            <div class="language-switcher">
+                <button class="lang-btn active" data-lang="zh">中文</button>
+                <button class="lang-btn" data-lang="ja">日本語</button>
+            </div>
+            <div class="logo">
+                <i class="fab fa-bilibili"></i>
+                <h1 data-zh="VRC Bilibili 解析工具" data-ja="VRC Bilibili 解析ツール">VRC Bilibili 解析工具</h1>
+            </div>
+            <p class="subtitle" data-zh="快速獲取 Bilibili 影片的直鏈地址" data-ja="Bilibili 動画の直接リンクを素早く取得">快速獲取 Bilibili 影片的直鏈地址</p>
+            <p class="domain">bili.karabuoke.com</p>
+            
+            <div class="stats-container">
+                <div class="stat-box">
+                    <div class="stat-number" id="todayCount">0</div>
+                    <div class="stat-label" data-zh="今日服務" data-ja="今日サービス">今日服務</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" id="monthCount">0</div>
+                    <div class="stat-label" data-zh="本月服務" data-ja="今月サービス">本月服務</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-number" id="totalCount">0</div>
+                    <div class="stat-label" data-zh="累計服務" data-ja="累計サービス">累計服務</div>
+                </div>
+            </div>
+        </header>
 
         <main class="main-content">
             <div class="input-section">
@@ -53,16 +51,15 @@
                     </button>
                 </div>
                 
-                <!-- Mirror 節點專用欄位 -->
                 <div class="mirror-section">
                     <div class="mirror-input-group">
-                        <input type="text" id="mirrorUrlInput" placeholder="請輸入要在栖隙居所撥放的BILIBILI連結" class="mirror-url-input" data-zh-placeholder="請輸入要在栖隙居所撥放的BILIBILI連結" data-ja-placeholder="栖隙居所で再生するBILIBILIリンクを入力してください">
+                        <input type="text" id="mirrorUrlInput" placeholder="請輸入要進行專用節點播放的 BILIBILI 連結" class="mirror-url-input" data-zh-placeholder="請輸入要進行專用節點播放的 BILIBILI 連結" data-ja-placeholder="専用ノードで再生する BILIBILI リンクを入力してください">
                         <button id="mirrorParseBtn" class="mirror-parse-btn">
                             <i class="fas fa-server"></i>
                             <span data-zh="解析" data-ja="解析">解析</span>
                         </button>
                     </div>
-                    <p class="mirror-note" data-zh="專門使用栖隙居所進行解析，可能有機率失效" data-ja="栖隙居所専用で解析し、失敗する可能性があります">專門使用栖隙居所進行解析，可能有機率失效</p>
+                    <p class="mirror-note" data-zh="使用專用鏡像節點進行解析，可能有機率失效" data-ja="専用ミラーノードで解析し、失敗する可能性があります">使用專用鏡像節點進行解析，可能有機率失效</p>
                 </div>
                 
                 <div class="example-links">
@@ -82,25 +79,19 @@
                     </button>
                 </div>
                 <div class="result-content" id="resultContent">
-                    <!-- 解析結果將在這裡顯示 -->
-                </div>
+                    </div>
             </div>
 
-            <!-- 使用說明 -->
             <div class="usage-section">
                 <h2 data-zh="使用說明" data-ja="使用方法">使用說明</h2>
                 <div class="usage-notes">
                     <div class="usage-note">
                         <i class="fas fa-link"></i>
-                        <p data-zh="讓解析更方便：將 https://vrcbilibili.糕.tw/?url= 放在連結前面即可馬上解析" data-ja="解析をより簡単に：https://vrcbilibili.糕.tw/?url= をリンクの前に付けるだけで即座に解析">讓解析更方便：將 https://vrcbilibili.糕.tw/?url= 放在連結前面即可馬上解析</p>
+                        <p data-zh="讓解析更方便：將 https://bili.karabuoke.com/?url= 放在連結前面即可馬上解析" data-ja="解析をより簡単に：https://bili.karabuoke.com/?url= をリンクの前に付けるだけで即座に解析">讓解析更方便：將 https://bili.karabuoke.com/?url= 放在連結前面即可馬上解析</p>
                     </div>
                     <div class="usage-note">
-                        <i class="fas fa-users"></i>
-                        <p data-zh="目前只支援私人房間還有作者的公開房" data-ja="現在はプライベートルームと作者の公開ルームのみサポート">目前只支援私人房間還有作者的公開房</p>
-                    </div>
-                    <div class="usage-note">
-                        <i class="fas fa-envelope"></i>
-                        <p data-zh="公開房作者需要使用請連絡我的email新增白名單" data-ja="公開ルーム作者は使用するために私のメールに連絡してホワイトリストに追加してください">公開房作者需要使用請連絡我的email新增白名單</p>
+                        <i class="fas fa-info-circle"></i>
+                        <p data-zh="本站支援 VRChat 內建播放器直接串流播放" data-ja="本サービスはVRChat内プレイヤーでの直接再生に対応しています">本站支援 VRChat 內建播放器直接串流播放</p>
                     </div>
                 </div>
             </div>
@@ -128,13 +119,8 @@
         </main>
 
         <footer class="footer">
-            <p>&copy; <span id="copyrightYear">2025</span> <span data-zh="VRC Bilibili 解析工具" data-ja="VRC Bilibili 解析ツール">VRC Bilibili 解析工具</span>. <span data-zh="僅供學習交流使用" data-ja="学習・交流目的のみ">僅供學習交流使用</span></p>
+            <p>&copy; <span id="copyrightYear">2026</span> <span data-zh="VRC Bilibili 解析工具" data-ja="VRC Bilibili 解析ツール">VRC Bilibili 解析工具</span>. <span data-zh="僅供學習交流使用" data-ja="学習・交流目的のみ">僅供學習交流使用</span></p>
             <p class="disclaimer"><span data-zh="請尊重創作者版權，不要濫用解析功能" data-ja="創作者の著作権を尊重し、解析機能を乱用しないでください">請尊重創作者版權，不要濫用解析功能</span></p>
-            <p><span data-zh="技術支援：" data-ja="技術サポート：">技術支援：</span> <a href="mailto:wangure0329@糕.tw">wangure0329@糕.tw</a></p>
-            <p class="author-info">
-                <span data-zh="by りん" data-ja="by りん">by りん</span> | 
-                <a href="https://x.com/wangure0329" target="_blank" rel="noopener noreferrer" data-zh="X: @wangure0329" data-ja="X: @wangure0329">X: @wangure0329</a>
-            </p>
         </footer>
     </div>
 
