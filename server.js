@@ -577,7 +577,14 @@ async function parseAndRedirectTo1440P(req, res, bvid) {
 
 // Niche 專用路由 - 只使用 upos-sz-mirrorcos.bilivideo.com 節點
 app.get('/niche/', async (req, res) => {
-    const { url } = req.query;
+    // 💡 修正：直接從原始 req.url 提取完整 url 參數，防止雙重問號被 Express 切碎
+    let url = null;
+    const urlParamIndex = req.url.indexOf('url=');
+    if (urlParamIndex !== -1) {
+        url = req.url.substring(urlParamIndex + 4);
+        // 如果傳入的網址包含多個問號且帶有 B 站追蹤碼，直接將重複的問號修正為標準 &
+        url = url.replace(/(\/video\/BV[a-zA-Z0-9]+)\/\?/, '$1/?');
+    }
     if (url) {
         // 嘗試多種方式獲取真實 IP
         let clientIP = req.ip || 
@@ -746,7 +753,11 @@ app.get('/niche/', async (req, res) => {
 
 // 主頁面路由 - 處理 URL 參數重定向
 app.get('/', async (req, res) => {
-    const { url } = req.query;
+    // 💡 修正：直接從原始 req.url 提取完整 url 參數，防止雙重問號被 Express 切碎
+    let url = null;
+    if (req.url.startsWith('/?url=')) {
+        url = req.url.substring(6);
+    }
     if (url) {
         // 如果有 URL 參數，重定向到解析結果頁面
         // 嘗試多種方式獲取真實 IP
