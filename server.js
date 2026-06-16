@@ -257,7 +257,7 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
                     const streamData = streamResponse.data.data;
                     
                     // 優先選擇 DASH 格式的 1440P 視頻流
-                    if (false && streamData.dash && streamData.dash.video) {
+                    if (streamData.dash && streamData.dash.video) {
                         const dash1440P = streamData.dash.video.find(item => item.id === 112);
                         if (dash1440P) {
                             const selectedMainNode = await getBestAvailableNode(bvid);
@@ -381,7 +381,7 @@ async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
                     const streamData = streamResponse.data.data;
                     
                     // 優先選擇 DASH 格式的 1440P 視頻流
-                    if (false && streamData.dash && streamData.dash.video) {
+                    if (streamData.dash && streamData.dash.video) {
                         const dash1440P = streamData.dash.video.find(item => item.id === 112);
                         if (dash1440P) {
                             const selectedMainNode = 'upos-sz-mirror08c.bilivideo.com'; // 強制使用 niche 節點
