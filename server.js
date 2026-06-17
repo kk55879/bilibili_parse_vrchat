@@ -17,7 +17,6 @@ let serviceCounters = {
     lastResetMonth: new Date().getMonth()
 };
 
-// 中間件
 app.use(cors({
     origin: true,
     credentials: true
@@ -25,17 +24,6 @@ app.use(cors({
 app.use(express.json());
 
 app.set('trust proxy', true);
-
-function getLocationInfo(ip) {
-    if (ip === '::1' || ip === '127.0.0.1' || ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.')) {
-        return '本地網路';
-    }
-    const geo = geoip.lookup(ip);
-    if (geo) {
-        return `${geo.country} ${geo.city || geo.region || ''}`.trim();
-    }
-    return '未知位置';
-}
 
 function updateCounters() {
     const now = new Date();
@@ -125,7 +113,7 @@ async function getBestAvailableNode(bvid) {
     return sortedNodes[0] || 'upos-sz-estgoss.bilivideo.com';
 }
 
-// 保險 1：本地海外線路直解 (Render 本地 IP)
+// 保險 1：本地海外線路直解
 async function parseVideoNative(bvid) {
     const videoInfoResponse = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
         headers: {
@@ -160,9 +148,10 @@ async function parseVideoNative(bvid) {
     throw new Error('本地海外線路遭風控封鎖');
 }
 
-// 雙線調度核心 (保險 1 ➔ 保險 2 盲跳轉)
+// 雙線調度核心
 async function handleDispatch(req, res, bvid) {
     const startTime = Date.now();
+    console.log(`🚀 [核心調度] 開始處理 BV 號: ${bvid}`);
     
     // 💡 1. 第一線：本地海外直解測試
     try {
@@ -171,21 +160,52 @@ async function handleDispatch(req, res, bvid) {
         console.log(`✅ 【第一線：本地海外】解析成功 | 耗時: ${Date.now() - startTime}ms`);
         return res.redirect(result.url);
     } catch (e) {
-        console.log(`⚠️ 【第一線】本地海外失敗（遇到版權/風控片）。立刻啟用【第二線：大陸伺服器盲跳轉】...`);
+        console.log(`⚠️ 【第一線】本地海外失敗。立刻啟用【第二線：大陸伺服器盲跳轉】...`);
     }
 
-    // 💡 2. 第二線：大陸第三方伺服器跳轉 (放棄嚴格檢查，直接強制盲跳轉)
+    // 💡 2. 第二線：大陸第三方伺服器跳轉
     try {
         console.log(`✈️ 執行隱密重新導向至大陸伺服器: ${bvid}`);
         updateCounters();
-        
-        // 核心安全防禦：強制切斷來源 Referer，保護域名不外洩
         res.setHeader('Referrer-Policy', 'no-referrer');
         return res.redirect(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`);
     } catch (finalError) {
         console.error(`❌ 第二線跳轉異常。最終回彈 B 站原網址。`);
         return res.redirect(`https://www.bilibili.com/video/${bvid}`);
     }
+}
+
+// 統一解析與網址過濾函數
+async function processUrlRequest(req, res, rawUrl) {
+    console.log(`🌐 收到原始解析請求: ${rawUrl}`);
+    let processedUrl = rawUrl;
+
+    if (processedUrl.includes('b23.tv/')) {
+        const resolvedUrl = await resolveB23ShortLink(processedUrl);
+        if (resolvedUrl) processedUrl = resolvedUrl;
+    }
+
+    // 💡 改用絕對安全的精準提取法：直接攔截網址中的 BV 關鍵字與後續 10 位字元
+    let bvid = null;
+    const bvIndex = processedUrl.indexOf('BV');
+    if (bvIndex !== -1) {
+        // 提取從 BV 開始的 12 個字元 (例如 BV1xx411c7X6)
+        const potentialBv = processedUrl.substring(bvIndex, bvIndex + 12);
+        // 去除可能誤夾的斜線或問號
+        bvid = potentialBv.replace(/[/?]/g, "");
+    }
+
+    if (bvid && bvid.startsWith('BV') && bvid.length >= 10) {
+        return handleDispatch(req, res, bvid);
+    }
+
+    console.log(`⚠️ 無法從網址提取有效 BV 號，執行預設放行或錯誤處理。`);
+    const userAgentHeader = req.headers['user-agent'] || '';
+    const acceptHeader = req.headers['accept'] || '';
+    if (userAgentHeader.includes('AVProVideo') || userAgentHeader.includes('VRChat') || acceptHeader.includes('video/') || !acceptHeader.includes('text/html')) {
+        return res.redirect(processedUrl);
+    }
+    return res.send(`<h2>❌ 解析失敗，請提供正確的 Bilibili 影片連結</h2>`);
 }
 
 // Niche 路由
@@ -196,37 +216,7 @@ app.get('/niche/', async (req, res) => {
         url = req.url.substring(urlParamIndex + 4);
         try { url = decodeURIComponent(url); } catch(e){}
     }
-    if (url) {
-        let processedUrl = url;
-        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-            if (url.startsWith('www.bilibili.com') || url.startsWith('bilibili.com')) {
-                processedUrl = 'https://' + url;
-            } else if (url.startsWith('BV')) {
-                processedUrl = 'https://www.bilibili.com/video/' + url;
-            } else {
-                processedUrl = 'https://' + url;
-            }
-        }
-        if (processedUrl.includes('b23.tv/')) {
-            const resolvedUrl = await resolveB23ShortLink(processedUrl);
-            if (resolvedUrl) processedUrl = resolvedUrl;
-        }
-        
-        // 💡 核心防禦：強制擦除參數雜質，乾淨提取 BV 號
-        let bvid = null;
-        const cleanUrl = processedUrl.split('?')[0];
-        const match = cleanUrl.match(/(BV[a-zA-Z0-9]+)/);
-        if (match) bvid = match[1];
-
-        if (bvid) return handleDispatch(req, res, bvid);
-
-        const userAgentHeader = req.headers['user-agent'] || '';
-        const acceptHeader = req.headers['accept'] || '';
-        if (userAgentHeader.includes('AVProVideo') || userAgentHeader.includes('VRChat') || acceptHeader.includes('video/') || !acceptHeader.includes('text/html')) {
-            return res.redirect(processedUrl);
-        }
-        return res.send(`<h1>❌ Niche 解析失敗</h1>`);
-    }
+    if (url) return processUrlRequest(req, res, url);
     res.send(`<h1>🎯 Niche 解析工具</h1>`);
 });
 
@@ -238,39 +228,7 @@ app.get('/', async (req, res) => {
         url = req.url.substring(urlParamIndex + 4);
         try { url = decodeURIComponent(url); } catch (e) {}
     }
-
-    if (url) {
-        console.log(`🌐 收到外部解析請求: ${url}`);
-        let processedUrl = url;
-        if (!url.startsWith('http://') && !url.startsWith('https://')) {
-            if (url.startsWith('www.bilibili.com') || url.startsWith('bilibili.com')) {
-                processedUrl = 'https://' + url;
-            } else if (url.startsWith('BV')) {
-                processedUrl = 'https://www.bilibili.com/video/' + url;
-            } else {
-                processedUrl = 'https://' + url;
-            }
-        }
-        if (processedUrl.includes('b23.tv/')) {
-            const resolvedUrl = await resolveB23ShortLink(processedUrl);
-            if (resolvedUrl) processedUrl = resolvedUrl;
-        }
-        
-        // 💡 核心防禦：強制擦除參數雜質，乾淨提取 BV 號
-        let bvid = null;
-        const cleanUrl = processedUrl.split('?')[0];
-        const match = cleanUrl.match(/(BV[a-zA-Z0-9]+)/);
-        if (match) bvid = match[1];
-
-        if (bvid) return handleDispatch(req, res, bvid);
-
-        const userAgentHeader = req.headers['user-agent'] || '';
-        const acceptHeader = req.headers['accept'] || '';
-        if (userAgentHeader.includes('AVProVideo') || userAgentHeader.includes('VRChat') || acceptHeader.includes('video/') || !acceptHeader.includes('text/html')) {
-            return res.redirect(processedUrl);
-        }
-        return res.send(`<h2>❌ 解析失敗</h2>`);
-    }
+    if (url) return processUrlRequest(req, res, url);
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
