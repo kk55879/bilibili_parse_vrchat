@@ -164,28 +164,26 @@ async function parseVideoNative(bvid) {
 async function handleDispatch(req, res, bvid) {
     const startTime = Date.now();
     
-    // 💡 1. 第一線：本地海外直解測試 (沒鎖區的片直接秒播)
+    // 💡 1. 第一線：本地海外直解測試
     try {
         const result = await parseVideoNative(bvid);
         updateCounters();
         console.log(`✅ 【第一線：本地海外】解析成功 | 耗時: ${Date.now() - startTime}ms`);
         return res.redirect(result.url);
     } catch (e) {
-        console.log(`⚠️ 【第一線】本地海外失敗（遇到版權/風控片）。立刻無縫啟用【第二線：大陸伺服器跳轉】...`);
+        console.log(`⚠️ 【第一線】本地海外失敗（遇到版權/風控片）。立刻啟用【第二線：大陸伺服器盲跳轉】...`);
     }
 
-    // 💡 2. 第二線：大陸第三方伺服器跳轉 (抹除 Referer 盲導流)
+    // 💡 2. 第二線：大陸第三方伺服器跳轉 (放棄嚴格檢查，直接強制盲跳轉)
     try {
-        // 先花 2 秒健康檢查
-        await axios.head(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`, { timeout: 2000 });
-        console.log(`✈️ 【第二線：大陸伺服器】在線檢查通過！執行隱密重新導向: ${bvid}`);
+        console.log(`✈️ 執行隱密重新導向至大陸伺服器: ${bvid}`);
         updateCounters();
         
         // 核心安全防禦：強制切斷來源 Referer，保護域名不外洩
         res.setHeader('Referrer-Policy', 'no-referrer');
         return res.redirect(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`);
     } catch (finalError) {
-        console.error(`❌ 雙保險全數陣亡（對方伺服器死機）。最終回彈 B 站原網址。`);
+        console.error(`❌ 第二線跳轉異常。最終回彈 B 站原網址。`);
         return res.redirect(`https://www.bilibili.com/video/${bvid}`);
     }
 }
