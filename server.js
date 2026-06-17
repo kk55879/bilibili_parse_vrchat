@@ -37,7 +37,6 @@ function getLocationInfo(ip) {
     return '未知位置';
 }
 
-// 計數器管理函數
 function updateCounters() {
     const now = new Date();
     const today = now.toDateString();
@@ -113,12 +112,11 @@ async function resolveB23ShortLink(shortUrl) {
 const nodeStatus = {
     'upos-sz-estgoss.bilivideo.com': { available: true, lastCheck: 0, successCount: 0, failCount: 0, region: '深圳' },
     'upos-bj-estgoss.bilivideo.com': { available: true, lastCheck: 0, successCount: 0, failCount: 0, region: '北京' },
-    'upos-hz-estgoss.bilivideo.com': { available: true, lastCheck: 0, successCount: 0, failCount: 0, region: '杭州' },
-    'upos-sz-mirror08c.bilivideo.com': { available: true, lastCheck: 0, successCount: 0, failCount: 0, region: 'Mirror', isMirror: true }
+    'upos-hz-estgoss.bilivideo.com': { available: true, lastCheck: 0, successCount: 0, failCount: 0, region: '杭州' }
 };
 
 async function getBestAvailableNode(bvid) {
-    const mainNodes = Object.keys(nodeStatus).filter(node => !nodeStatus[node].isMirror);
+    const mainNodes = Object.keys(nodeStatus);
     const sortedNodes = mainNodes.sort((a, b) => {
         const aStatus = nodeStatus[a];
         const bStatus = nodeStatus[b];
@@ -127,7 +125,7 @@ async function getBestAvailableNode(bvid) {
     return sortedNodes[0] || 'upos-sz-estgoss.bilivideo.com';
 }
 
-// 保險 1：本地海外線路直解
+// 保險 1：本地海外線路直解 (Render 本地 IP)
 async function parseVideoNative(bvid) {
     const videoInfoResponse = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
         headers: {
@@ -159,78 +157,35 @@ async function parseVideoNative(bvid) {
             }
         }
     }
-    throw new Error('本地海外解析不可用');
+    throw new Error('本地海外線路遭風控封鎖');
 }
 
-// 保險 2（原保險 3）：開源代理線路解析（代購網址模式）
-async function parseVideoWithProxyRoute(bvid) {
-    const videoInfoResponse = await axios.get(`https://bili.biliapi.hk/x/web-interface/view?bvid=${bvid}`, {
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': 'https://www.bilibili.com/'
-        },
-        timeout: 5000
-    });
-
-    if (videoInfoResponse.data.code === 0) {
-        const cid = videoInfoResponse.data.data.cid;
-        const streamResponse = await axios.get(`https://bili.biliapi.hk/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=64&fnval=16&platform=html5`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://www.bilibili.com/'
-            },
-            timeout: 5000
-        });
-        
-        if (streamResponse.data.code === 0) {
-            const streamData = streamResponse.data.data;
-            if (streamData.dash && streamData.dash.video) {
-                const dash720P = streamData.dash.video.find(item => item.id === 64);
-                if (dash720P) {
-                    // 💡 注意：開源代理成功時，網址一定會被替換為這個 mirror08c 節點
-                    const selectedMainNode = 'upos-sz-mirror08c.bilivideo.com';
-                    let mainNodeUrl = dash720P.baseUrl.replace(/upos-[^/]+\.bilivideo\.com/, selectedMainNode);
-                    return { url: mainNodeUrl, format: 'DASH' };
-                }
-            }
-        }
-    }
-    throw new Error('開源代理代購線路不可用');
-}
-
-// 測試用分流調度（實作：1 ➔ 3 ➔ 2 順序）
+// 雙線調度核心 (保險 1 ➔ 保險 2 盲跳轉)
 async function handleDispatch(req, res, bvid) {
     const startTime = Date.now();
     
-    // 💡 1. 第一線：本地海外直解測試
+    // 💡 1. 第一線：本地海外直解測試 (沒鎖區的片直接秒播)
     try {
         const result = await parseVideoNative(bvid);
         updateCounters();
         console.log(`✅ 【第一線：本地海外】解析成功 | 耗時: ${Date.now() - startTime}ms`);
         return res.redirect(result.url);
     } catch (e) {
-        console.log(`⚠️ 【第一線】失敗。準備切換至【第二線（原第三線）：開源公共代理代購】...`);
+        console.log(`⚠️ 【第一線】本地海外失敗（遇到版權/風控片）。立刻無縫啟用【第二線：大陸伺服器跳轉】...`);
     }
 
-    // 💡 2. 第二線（原第三線）：呼叫開源公共代理，確認其是否能獨立工作
+    // 💡 2. 第二線：大陸第三方伺服器跳轉 (抹除 Referer 盲導流)
     try {
-        const result = await parseVideoWithProxyRoute(bvid);
+        // 先花 2 秒健康檢查
+        await axios.head(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`, { timeout: 2000 });
+        console.log(`✈️ 【第二線：大陸伺服器】在線檢查通過！執行隱密重新導向: ${bvid}`);
         updateCounters();
-        console.log(`✅ 【第二線：開源代理】解析成功！網址應為 mirror08c | 耗時: ${Date.now() - startTime}ms`);
-        return res.redirect(result.url);
-    } catch (proxyError) {
-        console.log(`🚨 【第二線：開源代理】失敗或遭封鎖！退守終極防線【第三線：大陸伺服器跳轉】...`);
-    }
-
-    // 💡 3. 第三線（原第二線）：大陸第三方伺服器盲跳轉保底
-    try {
-        await axios.head(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`, { timeout: 2500 });
-        console.log(`✈️ 【第三線：大陸伺服器】健康檢查通過！執行盲跳轉轉定向: ${bvid}`);
-        updateCounters();
+        
+        // 核心安全防禦：強制切斷來源 Referer，保護域名不外洩
         res.setHeader('Referrer-Policy', 'no-referrer');
         return res.redirect(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`);
     } catch (finalError) {
-        console.error(`❌ 三線保險全部宣告陣亡！回彈官方原網址。`);
+        console.error(`❌ 雙保險全數陣亡（對方伺服器死機）。最終回彈 B 站原網址。`);
         return res.redirect(`https://www.bilibili.com/video/${bvid}`);
     }
 }
@@ -259,7 +214,7 @@ app.get('/niche/', async (req, res) => {
             if (resolvedUrl) processedUrl = resolvedUrl;
         }
         
-        // 💡 關鍵移除：移除問號後的追蹤參數雜質，乾淨提取 BV 號
+        // 💡 核心防禦：強制擦除參數雜質，乾淨提取 BV 號
         let bvid = null;
         const cleanUrl = processedUrl.split('?')[0];
         const match = cleanUrl.match(/(BV[a-zA-Z0-9]+)/);
@@ -303,7 +258,7 @@ app.get('/', async (req, res) => {
             if (resolvedUrl) processedUrl = resolvedUrl;
         }
         
-        // 💡 關鍵移除：移除問號後的追蹤參數雜質，乾淨提取 BV 號
+        // 💡 核心防禦：強制擦除參數雜質，乾淨提取 BV 號
         let bvid = null;
         const cleanUrl = processedUrl.split('?')[0];
         const match = cleanUrl.match(/(BV[a-zA-Z0-9]+)/);
