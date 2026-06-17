@@ -37,6 +37,7 @@ function getLocationInfo(ip) {
     return '未知位置';
 }
 
+// 計數器管理函數
 function updateCounters() {
     const now = new Date();
     const today = now.toDateString();
@@ -126,6 +127,7 @@ async function getBestAvailableNode(bvid) {
     return sortedNodes[0] || 'upos-sz-estgoss.bilivideo.com';
 }
 
+// 保險 1：本地海外線路直解
 async function parseVideoNative(bvid) {
     const videoInfoResponse = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
         headers: {
@@ -160,6 +162,7 @@ async function parseVideoNative(bvid) {
     throw new Error('本地海外解析不可用');
 }
 
+// 保險 2（原保險 3）：開源代理線路解析（代購網址模式）
 async function parseVideoWithProxyRoute(bvid) {
     const videoInfoResponse = await axios.get(`https://bili.biliapi.hk/x/web-interface/view?bvid=${bvid}`, {
         headers: {
@@ -184,6 +187,7 @@ async function parseVideoWithProxyRoute(bvid) {
             if (streamData.dash && streamData.dash.video) {
                 const dash720P = streamData.dash.video.find(item => item.id === 64);
                 if (dash720P) {
+                    // 💡 注意：開源代理成功時，網址一定會被替換為這個 mirror08c 節點
                     const selectedMainNode = 'upos-sz-mirror08c.bilivideo.com';
                     let mainNodeUrl = dash720P.baseUrl.replace(/upos-[^/]+\.bilivideo\.com/, selectedMainNode);
                     return { url: mainNodeUrl, format: 'DASH' };
@@ -194,33 +198,37 @@ async function parseVideoWithProxyRoute(bvid) {
     throw new Error('開源代理代購線路不可用');
 }
 
+// 測試用分流調度（實作：1 ➔ 3 ➔ 2 順序）
 async function handleDispatch(req, res, bvid) {
     const startTime = Date.now();
     
+    // 💡 1. 第一線：本地海外直解測試
     try {
         const result = await parseVideoNative(bvid);
         updateCounters();
         console.log(`✅ 【第一線：本地海外】解析成功 | 耗時: ${Date.now() - startTime}ms`);
         return res.redirect(result.url);
     } catch (e) {
-        console.log(`⚠️ 【第一線】失敗。準備切換至【第二線：大陸伺服器跳轉】...`);
+        console.log(`⚠️ 【第一線】失敗。準備切換至【第二線（原第三線）：開源公共代理代購】...`);
     }
 
-    try {
-        await axios.head(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`, { timeout: 2500 });
-        console.log(`✈️ 【第二線：大陸伺服器】健康檢查通過！執行盲跳轉轉定向: ${bvid}`);
-        updateCounters();
-        res.setHeader('Referrer-Policy', 'no-referrer');
-        return res.redirect(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`);
-    } catch (proxyError) {
-        console.log(`🚨 【第二線：大陸伺服器】掛掉或連線超時！啟動救場【第三線：開源公共代理代購】...`);
-    }
-
+    // 💡 2. 第二線（原第三線）：呼叫開源公共代理，確認其是否能獨立工作
     try {
         const result = await parseVideoWithProxyRoute(bvid);
         updateCounters();
-        console.log(`✅ 【第三線：開源代理】成功救場！ | 耗時: ${Date.now() - startTime}ms`);
+        console.log(`✅ 【第二線：開源代理】解析成功！網址應為 mirror08c | 耗時: ${Date.now() - startTime}ms`);
         return res.redirect(result.url);
+    } catch (proxyError) {
+        console.log(`🚨 【第二線：開源代理】失敗或遭封鎖！退守終極防線【第三線：大陸伺服器跳轉】...`);
+    }
+
+    // 💡 3. 第三線（原第二線）：大陸第三方伺服器盲跳轉保底
+    try {
+        await axios.head(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`, { timeout: 2500 });
+        console.log(`✈️ 【第三線：大陸伺服器】健康檢查通過！執行盲跳轉轉定向: ${bvid}`);
+        updateCounters();
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        return res.redirect(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`);
     } catch (finalError) {
         console.error(`❌ 三線保險全部宣告陣亡！回彈官方原網址。`);
         return res.redirect(`https://www.bilibili.com/video/${bvid}`);
@@ -250,8 +258,11 @@ app.get('/niche/', async (req, res) => {
             const resolvedUrl = await resolveB23ShortLink(processedUrl);
             if (resolvedUrl) processedUrl = resolvedUrl;
         }
+        
+        // 💡 關鍵移除：移除問號後的追蹤參數雜質，乾淨提取 BV 號
         let bvid = null;
-        const match = processedUrl.match(/(BV[a-zA-Z0-9]+)/);
+        const cleanUrl = processedUrl.split('?')[0];
+        const match = cleanUrl.match(/(BV[a-zA-Z0-9]+)/);
         if (match) bvid = match[1];
 
         if (bvid) return handleDispatch(req, res, bvid);
@@ -291,8 +302,11 @@ app.get('/', async (req, res) => {
             const resolvedUrl = await resolveB23ShortLink(processedUrl);
             if (resolvedUrl) processedUrl = resolvedUrl;
         }
+        
+        // 💡 關鍵移除：移除問號後的追蹤參數雜質，乾淨提取 BV 號
         let bvid = null;
-        const match = processedUrl.match(/(BV[a-zA-Z0-9]+)/);
+        const cleanUrl = processedUrl.split('?')[0];
+        const match = cleanUrl.match(/(BV[a-zA-Z0-9]+)/);
         if (match) bvid = match[1];
 
         if (bvid) return handleDispatch(req, res, bvid);
