@@ -126,7 +126,6 @@ async function getBestAvailableNode(bvid) {
     return sortedNodes[0] || 'upos-sz-estgoss.bilivideo.com';
 }
 
-// 核心重試解析（純本地海外 720P 直解，如果失敗就拋出錯誤）
 async function parseVideoNative(bvid) {
     const videoInfoResponse = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
         headers: {
@@ -161,7 +160,6 @@ async function parseVideoNative(bvid) {
     throw new Error('本地海外解析不可用');
 }
 
-// 備用開源代理線路解析（代購網址模式）
 async function parseVideoWithProxyRoute(bvid) {
     const videoInfoResponse = await axios.get(`https://bili.biliapi.hk/x/web-interface/view?bvid=${bvid}`, {
         headers: {
@@ -196,11 +194,9 @@ async function parseVideoWithProxyRoute(bvid) {
     throw new Error('開源代理代購線路不可用');
 }
 
-// 分流調度核心（實作：本地海外 ➔ 大陸備用 ➔ 開源代理 三線防線）
 async function handleDispatch(req, res, bvid) {
     const startTime = Date.now();
     
-    // 💡 1. 第一線：本地海外直解測試
     try {
         const result = await parseVideoNative(bvid);
         updateCounters();
@@ -210,12 +206,8 @@ async function handleDispatch(req, res, bvid) {
         console.log(`⚠️ 【第一線】失敗。準備切換至【第二線：大陸伺服器跳轉】...`);
     }
 
-    // 💡 2. 第二線：先用本機測試大陸線路是否活著
     try {
-        // 發送一個快速的 HEAD 請求確認對方的伺服器在線
         await axios.head(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`, { timeout: 2500 });
-        
-        // 如果在線，直接切斷出處 Referer 並跳轉過去，完成二線交接
         console.log(`✈️ 【第二線：大陸伺服器】健康檢查通過！執行盲跳轉轉定向: ${bvid}`);
         updateCounters();
         res.setHeader('Referrer-Policy', 'no-referrer');
@@ -224,7 +216,6 @@ async function handleDispatch(req, res, bvid) {
         console.log(`🚨 【第二線：大陸伺服器】掛掉或連線超時！啟動救場【第三線：開源公共代理代購】...`);
     }
 
-    // 💡 3. 第三線：大陸線路死掉後的「終極防線」
     try {
         const result = await parseVideoWithProxyRoute(bvid);
         updateCounters();
