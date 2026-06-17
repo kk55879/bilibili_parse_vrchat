@@ -23,6 +23,13 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// 💡 新增：強制瀏覽器與 VRChat 播放器「絕對不要快取」任何解析結果
+app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+});
 app.set('trust proxy', true);
 
 function updateCounters() {
