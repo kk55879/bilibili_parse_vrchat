@@ -121,7 +121,7 @@ async function resolveB23ShortLink(shortUrl) {
     }
 }
 
-// 節點狀態管理
+// 節節狀態管理
 const nodeStatus = {
     'upos-sz-estgoss.bilivideo.com': { available: true, lastCheck: 0, successCount: 0, failCount: 0, region: '深圳' },
     'upos-bj-estgoss.bilivideo.com': { available: true, lastCheck: 0, successCount: 0, failCount: 0, region: '北京' },
@@ -174,29 +174,55 @@ async function parseWithTimeoutForNiche(bvid, timeoutMs = 10000) {
     });
 }
 
-// 重試解析函數 (限制 720P)
+// 核心重試引擎 (包含保險 1 與 保險 2 代理代購切換)
 async function parseVideoWithRetry(bvid, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         const attemptStartTime = Date.now();
         try {
-            console.log(`🔄 嘗試解析 (第 ${attempt}/${maxRetries} 次): ${bvid} | 開始時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
+            // 💡 保險 1：常規嘗試，使用本機 Render 海外 IP 請求
+            let useProxyRoute = false;
+            console.log(`🔄 嘗試解析 (第 ${attempt}/${maxRetries} 次): ${bvid} | 線路: 本地海外線路`);
             
-            const videoInfoResponse = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Referer': 'https://www.bilibili.com/'
-                }
-            });
+            let videoInfoResponse;
+            try {
+                videoInfoResponse = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Referer': 'https://www.bilibili.com/'
+                    },
+                    timeout: 5000
+                });
+            } catch (e) {
+                // 如果連影片資訊都拿不到，直接觸發保險 2 代理線路
+                useProxyRoute = true;
+            }
+
+            // 判斷是否需要啟用 保險 2
+            if (useProxyRoute || (videoInfoResponse && videoInfoResponse.data.code !== 0)) {
+                console.log(`⚠️ 本地線路遭風控，自動切換至【保險 2：開源社群公共代理】代購網址...`);
+                useProxyRoute = true;
+                videoInfoResponse = await axios.get(`https://bili.biliapi.hk/x/web-interface/view?bvid=${bvid}`, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Referer': 'https://www.bilibili.com/'
+                    },
+                    timeout: 6000
+                });
+            }
 
             if (videoInfoResponse.data.code === 0) {
                 const videoData = videoInfoResponse.data.data;
                 const cid = videoData.cid;
                 
-                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=64&fnval=16&platform=html5`, {
+                // 根據一、二線決定發送 API 的目標網域
+                const targetDomain = useProxyRoute ? 'bili.biliapi.hk' : 'api.bilibili.com';
+                
+                const streamResponse = await axios.get(`https://${targetDomain}/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=64&fnval=16&platform=html5`, {
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                         'Referer': 'https://www.bilibili.com/'
-                    }
+                    },
+                    timeout: 6000
                 });
                 
                 if (streamResponse.data.code === 0) {
@@ -262,29 +288,51 @@ async function parseVideoWithRetry(bvid, maxRetries = 3) {
     }
 }
 
-// 重試解析函數（Niche 專用 - 限制 720P）
+// 重試解析函數（Niche 專用 - 整合保險 1 與 2）
 async function parseVideoWithRetryForNiche(bvid, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         const attemptStartTime = Date.now();
         try {
-            console.log(`🔄 Niche 嘗試解析 (第 ${attempt}/${maxRetries} 次): ${bvid} | 開始時間: ${new Date().toLocaleString('zh-TW', {timeZone: 'Asia/Taipei'})}`);
+            let useProxyRoute = false;
+            console.log(`🔄 Niche 嘗試解析 (第 ${attempt}/${maxRetries} 次): ${bvid} | 線路: 本地海外線路`);
             
-            const videoInfoResponse = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Referer': 'https://www.bilibili.com/'
-                }
-            });
+            let videoInfoResponse;
+            try {
+                videoInfoResponse = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Referer': 'https://www.bilibili.com/'
+                    },
+                    timeout: 5000
+                });
+            } catch (e) {
+                useProxyRoute = true;
+            }
+
+            if (useProxyRoute || (videoInfoResponse && videoInfoResponse.data.code !== 0)) {
+                console.log(`⚠️ Niche 本地線路遭風控，自動切換至【保險 2：開源社群公共代理】...`);
+                useProxyRoute = true;
+                videoInfoResponse = await axios.get(`https://bili.biliapi.hk/x/web-interface/view?bvid=${bvid}`, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Referer': 'https://www.bilibili.com/'
+                    },
+                    timeout: 6000
+                });
+            }
 
             if (videoInfoResponse.data.code === 0) {
                 const videoData = videoInfoResponse.data.data;
                 const cid = videoData.cid;
                 
-                const streamResponse = await axios.get(`https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=64&fnval=16&platform=html5`, {
+                const targetDomain = useProxyRoute ? 'bili.biliapi.hk' : 'api.bilibili.com';
+                
+                const streamResponse = await axios.get(`https://${targetDomain}/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=64&fnval=16&platform=html5`, {
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                         'Referer': 'https://www.bilibili.com/'
-                    }
+                    },
+                    timeout: 6000
                 });
                 
                 if (streamResponse.data.code === 0) {
@@ -355,13 +403,12 @@ async function parseAndRedirectToNiche(req, res, bvid) {
     const startTime = Date.now();
     try {
         const result = await parseWithTimeoutForNiche(bvid, 10000);
-        const parseTime = Date.now() - startTime;
-        const counters = updateCounters();
-        console.log(`✅ Niche 解析成功 | 格式: ${result.format} | 節點: ${result.node} | 今日${counters.today}次`);
+        updateCounters();
         return res.redirect(result.url);
     } catch (error) {
-        // 💡 修正：提取純 BV 號丟給大陸備用線路
-        console.log(`✈️ [Niche 路由] 本機解析版權片失敗，自動跳轉至大陸機房備用線路 (純 BV 號模式): ${bvid}`);
+        // 💡 保險 3：一、二線全部徹底失敗，抹除出處 Referer 跳轉至大陸備用線路
+        console.log(`🚨 [Niche 路由] 一、二線均告失敗！啟動【保險 3：終極大陸跳轉】(隱藏 Referer 模式): ${bvid}`);
+        res.setHeader('Referrer-Policy', 'no-referrer');
         return res.redirect(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`);
     }
 }
@@ -371,13 +418,12 @@ async function parseAndRedirectToMain(req, res, bvid) {
     const startTime = Date.now();
     try {
         const result = await parseWithTimeout(bvid, 10000);
-        const parseTime = Date.now() - startTime;
-        const counters = updateCounters();
-        console.log(`✅ 解析成功 | 格式: ${result.format} | 節點: ${result.node} | 今日${counters.today}次`);
+        updateCounters();
         return res.redirect(result.url);
     } catch (error) {
-        // 💡 修正：提取純 BV 號丟給大陸備用線路
-        console.log(`✈️ [主路由] 本機解析版權片失敗，自動跳轉至大陸機房備用線路 (純 BV 號模式): ${bvid}`);
+        // 💡 保險 3：一、二線全部徹底失敗，抹除出處 Referer 跳轉至大陸備用線路
+        console.log(`🚨 [主路由] 一、二線均告失敗！啟動【保險 3：終極大陸跳轉】(隱藏 Referer 模式): ${bvid}`);
+        res.setHeader('Referrer-Policy', 'no-referrer');
         return res.redirect(`http://ckapi.sevenbrothers.cn/bili/api?id=${bvid}`);
     }
 }
